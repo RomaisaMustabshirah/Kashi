@@ -1,5 +1,5 @@
 // =====================================================
-//  KASHI — Step 2: six tilings + a picker
+//  KASHI — Step 3: Hankin's method — star patterns
 // =====================================================
 
 // ---- 1. Grab the canvas and its 2D drawing context ----
@@ -11,7 +11,10 @@ const settings = {
   tileSize: 90,          // edge length of each polygon, in pixels
   background: "#f4efe4", // warm off-white, like glazed tile
   lineColor: "#1b3f8b",  // Multani cobalt blue
-  tiling: "square",      // which tiling to draw (a key of TILINGS)
+  tiling: "octagon",     // which tiling to draw (a key of TILINGS)
+  theta: 67.5,           // contact angle in degrees (0–90)
+  delta: 0,              // ray offset from the edge midpoint (0–1)
+  showTiling: true,      // draw the faint polygon skeleton underneath
 };
 
 // ---- 3. Tilings ----
@@ -179,18 +182,88 @@ function buildPolygons(tiling, width, height) {
   return polygons;
 }
 
-// ---- 5. Draw one polygon as a closed outline ----
-function drawPolygon(points) {
+// ---- 5. Hankin's method ----
+// Where two rays  p + t*r  and  q + u*s  cross. Returns null if they never meet going forward.
+function rayIntersection(p, r, q, s) {
+  const cross = r.x * s.y - r.y * s.x;
+  const qp = { x: q.x - p.x, y: q.y - p.y };
+
+  if (Math.abs(cross) < 1e-9) {
+    // Parallel rays. Special case: they lie on the SAME line and point at each other
+    // (happens at one exact angle per polygon, e.g. 45° in a square). They "meet" in the middle.
+    const sameLine = Math.abs(qp.x * r.y - qp.y * r.x) < 1e-6;
+    const facing = qp.x * r.x + qp.y * r.y > 0;
+    if (sameLine && facing) return { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 };
+    return null;                                       // truly parallel: never meet
+  }
+  const t = (qp.x * s.y - qp.y * s.x) / cross;         // distance along ray 1
+  const u = (qp.x * r.y - qp.y * r.x) / cross;         // distance along ray 2
+  if (t <= 0 || u <= 0) return null;                   // they only "meet" behind a start point
+  return { x: p.x + t * r.x, y: p.y + t * r.y };
+}
+
+// Turn ONE polygon into star-pattern line pieces.
+// theta : contact angle in degrees (how steeply rays go inward)
+// delta : 0..1, how far the two rays of each edge start apart from the midpoint
+function hankinPolygon(points, theta, delta) {
+  const n = points.length;
+  const th = theta * Math.PI / 180;
+
+  // centre of the polygon — used to know which side is "inside"
+  let cx = 0, cy = 0;
+  for (const p of points) { cx += p.x; cy += p.y; }
+  cx /= n; cy /= n;
+
+  // Step A: two rays per edge
+  const edges = [];
+  for (let i = 0; i < n; i++) {
+    const a = points[i];
+    const b = points[(i + 1) % n];
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    const d = { x: (b.x - a.x) / len, y: (b.y - a.y) / len };   // unit vector along the edge
+    const m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };       // midpoint
+
+    // inward normal: perpendicular to the edge, pointing toward the centre
+    let nrm = { x: -d.y, y: d.x };
+    if (nrm.x * (cx - m.x) + nrm.y * (cy - m.y) < 0) nrm = { x: d.y, y: -d.x };
+
+    const off = delta * len / 2;
+    edges.push({
+      // ray A starts a little toward vertex a, and leans back toward a
+      startA: { x: m.x - d.x * off, y: m.y - d.y * off },
+      dirA:   { x: -d.x * Math.cos(th) + nrm.x * Math.sin(th),
+                y: -d.y * Math.cos(th) + nrm.y * Math.sin(th) },
+      // ray B starts a little toward vertex b, and leans toward b
+      startB: { x: m.x + d.x * off, y: m.y + d.y * off },
+      dirB:   { x: d.x * Math.cos(th) + nrm.x * Math.sin(th),
+                y: d.y * Math.cos(th) + nrm.y * Math.sin(th) },
+    });
+  }
+
+  // Step B: ray B of edge i meets ray A of edge i+1, near the corner they share
+  const pieces = [];
+  for (let i = 0; i < n; i++) {
+    const e1 = edges[i];
+    const e2 = edges[(i + 1) % n];
+    const hit = rayIntersection(e1.startB, e1.dirB, e2.startA, e2.dirA);
+    if (hit) pieces.push([ e1.startB, hit, e2.startA ]);   // a little "V" shape
+  }
+  return pieces;
+}
+
+// ---- 6. Drawing helpers ----
+// Draw a list of points as a line. closed = true joins the last point back to the first.
+function drawPath(points, closed) {
   ctx.beginPath();
   ctx.moveTo(points[0].x, points[0].y);
   for (let k = 1; k < points.length; k++) {
     ctx.lineTo(points[k].x, points[k].y);
   }
-  ctx.closePath();
+  if (closed) ctx.closePath();
   ctx.stroke();
 }
 
-// ---- 6. Draw the whole picture ----
+// ---- 7. Draw the whole picture ----
 function draw() {
   const width = canvas.clientWidth;
   const height = canvas.clientHeight;
@@ -203,12 +276,26 @@ function draw() {
   const tiling = TILINGS[settings.tiling].make(settings.tileSize);
   const polygons = buildPolygons(tiling, width, height);
 
+  // Layer 1: the faint tiling skeleton
+  if (settings.showTiling) {
+    ctx.strokeStyle = "rgba(27, 63, 139, 0.15)";
+    ctx.lineWidth = 1;
+    for (const poly of polygons) drawPath(poly, true);
+  }
+
+  // Layer 2: the star pattern
   ctx.strokeStyle = settings.lineColor;
-  ctx.lineWidth = 1.5;
-  for (const poly of polygons) drawPolygon(poly);
+  ctx.lineWidth = 2;
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  for (const poly of polygons) {
+    for (const piece of hankinPolygon(poly, settings.theta, settings.delta)) {
+      drawPath(piece, false);
+    }
+  }
 }
 
-// ---- 7. Keep the canvas sharp and full-screen ----
+// ---- 8. Keep the canvas sharp and full-screen ----
 function resize() {
   const dpr = window.devicePixelRatio || 1;   // 2 on most phones / retina screens
   canvas.width = canvas.clientWidth * dpr;    // real pixels
@@ -217,7 +304,7 @@ function resize() {
   draw();
 }
 
-// ---- 8. The tiling picker ----
+// ---- 9. Controls ----
 const tilingSelect = document.getElementById("tiling");
 
 // Fill the dropdown from the TILINGS object, so new tilings appear automatically
@@ -231,6 +318,28 @@ tilingSelect.value = settings.tiling;
 
 tilingSelect.addEventListener("change", () => {
   settings.tiling = tilingSelect.value;
+  draw();
+});
+
+// Connect a slider to a setting, and show its value next to the label
+function bindSlider(id, key, format) {
+  const slider = document.getElementById(id);
+  const output = document.getElementById(id + "-value");
+  slider.value = settings[key];
+  output.textContent = format(settings[key]);
+  slider.addEventListener("input", () => {
+    settings[key] = parseFloat(slider.value);
+    output.textContent = format(settings[key]);
+    draw();
+  });
+}
+bindSlider("theta", "theta", v => v.toFixed(1) + "°");
+bindSlider("delta", "delta", v => v.toFixed(2));
+
+const tilingToggle = document.getElementById("showTiling");
+tilingToggle.checked = settings.showTiling;
+tilingToggle.addEventListener("change", () => {
+  settings.showTiling = tilingToggle.checked;
   draw();
 });
 

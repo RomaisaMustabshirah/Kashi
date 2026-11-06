@@ -34,20 +34,30 @@ html, body {
 #panel h1 {
   font-size: 22px;
   letter-spacing: 6px;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
   color: #7fd0e3;
 }
 
-#panel label {
-  display: block;
+.control {
+  margin-bottom: 16px;
+}
+
+.control label {
+  display: flex;
+  justify-content: space-between;
   font-size: 12px;
   letter-spacing: 1px;
   text-transform: uppercase;
-  opacity: 0.7;
+  opacity: 0.75;
   margin-bottom: 6px;
 }
 
-#panel select {
+.control label span {
+  color: #7fd0e3;
+  font-variant-numeric: tabular-nums;
+}
+
+.control select {
   width: 100%;
   padding: 8px 10px;
   border: none;
@@ -55,5 +65,31 @@ html, body {
   background: #f4efe4;
   color: #0f1a33;
   font-size: 14px;
+  cursor: pointer;
+}
+
+.control input[type="range"] {
+  width: 100%;
+  accent-color: #7fd0e3;
+  cursor: pointer;
+}
+
+/* checkbox row: box and label side by side */
+.control.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 0;
+}
+
+.control.checkbox label {
+  margin-bottom: 0;
+  cursor: pointer;
+}
+
+.control.checkbox input {
+  width: 16px;
+  height: 16px;
+  accent-color: #7fd0e3;
   cursor: pointer;
 }
