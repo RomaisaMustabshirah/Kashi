@@ -1,5 +1,5 @@
 // =====================================================
-//  KASHI — Step 4: straps, palettes and composition
+//  KASHI — Step 5: breathe, randomize, export
 // =====================================================
 
 // ---- 1. Grab the canvas and its 2D drawing context ----
@@ -32,7 +32,12 @@ const settings = {
   palette: 0,            // index into PALETTES
   fill: true,            // colour the star rosettes
   showTiling: false,     // draw the faint polygon skeleton underneath
+  breathe: false,        // animate θ gently back and forth
 };
+
+// How far θ swings either side when breathing, and how fast (radians per second)
+const BREATHE_RANGE = 12;
+const BREATHE_SPEED = 0.6;
 
 // ---- 3. Tilings ----
 // Every tiling is described the same way:
@@ -276,51 +281,55 @@ function hankinPolygon(points, theta, delta) {
 }
 
 // ---- 6. Drawing helpers ----
+// Every helper takes the context `c` to draw on. That lets us draw the SAME picture
+// on the screen canvas or on a big hidden canvas for exporting.
+
 // Draw a list of points as a line. closed = true joins the last point back to the first.
-function drawPath(points, closed) {
-  ctx.beginPath();
-  ctx.moveTo(points[0].x, points[0].y);
+function drawPath(c, points, closed) {
+  c.beginPath();
+  c.moveTo(points[0].x, points[0].y);
   for (let k = 1; k < points.length; k++) {
-    ctx.lineTo(points[k].x, points[k].y);
+    c.lineTo(points[k].x, points[k].y);
   }
-  if (closed) ctx.closePath();
-  ctx.stroke();
+  if (closed) c.closePath();
+  c.stroke();
 }
 
 // Fill a closed shape
-function fillPath(points, color) {
-  ctx.beginPath();
-  ctx.moveTo(points[0].x, points[0].y);
-  for (let k = 1; k < points.length; k++) ctx.lineTo(points[k].x, points[k].y);
-  ctx.closePath();
-  ctx.fillStyle = color;
-  ctx.fill();
+function fillPath(c, points, color) {
+  c.beginPath();
+  c.moveTo(points[0].x, points[0].y);
+  for (let k = 1; k < points.length; k++) c.lineTo(points[k].x, points[k].y);
+  c.closePath();
+  c.fillStyle = color;
+  c.fill();
 }
 
 // Put ALL star pieces into ONE path, so we can stroke thousands of lines in a single call
-function buildStrapPath(allPieces) {
-  ctx.beginPath();
+function buildStrapPath(c, allPieces) {
+  c.beginPath();
   for (const piece of allPieces) {
-    ctx.moveTo(piece[0].x, piece[0].y);
-    for (let k = 1; k < piece.length; k++) ctx.lineTo(piece[k].x, piece[k].y);
+    c.moveTo(piece[0].x, piece[0].y);
+    for (let k = 1; k < piece.length; k++) c.lineTo(piece[k].x, piece[k].y);
   }
 }
 
 // ---- 7. Draw the whole picture ----
-function draw() {
-  const width = canvas.clientWidth;
-  const height = canvas.clientHeight;
+// c      : the canvas context to draw on
+// width, height : size of the picture in CSS pixels
+// theta  : the contact angle to use (may differ from the slider while breathing)
+function renderPattern(c, width, height, theta) {
   const pal = PALETTES[settings.palette];
 
   // Background
-  ctx.fillStyle = pal.bg;
-  ctx.fillRect(0, 0, width, height);
+  c.fillStyle = pal.bg;
+  c.fillRect(0, 0, width, height);
 
-  // Rotate the whole drawing around the centre of the screen
-  ctx.save();
-  ctx.translate(width / 2, height / 2);
-  ctx.rotate(settings.rotation * Math.PI / 180);
-  ctx.translate(-width / 2, -height / 2);
+  // Rotate the whole drawing around the centre of the picture
+  c.save();
+  c.translate(width / 2, height / 2);
+  c.rotate(settings.rotation * Math.PI / 180);
+  c.translate(-width / 2, -height / 2);
 
   // Tiling
   const tiling = TILINGS[settings.tiling].make(settings.tileSize);
@@ -333,7 +342,7 @@ function draw() {
   const allPieces = [];
   const rosettes = [];
   for (const poly of polygons) {
-    const result = hankinPolygon(poly, settings.theta, settings.delta);
+    const result = hankinPolygon(poly, theta, settings.delta);
     allPieces.push(...result.pieces);
     if (result.rosette) rosettes.push({ shape: result.rosette, sides: poly.length });
   }
@@ -341,33 +350,46 @@ function draw() {
   // Layer 1: coloured rosettes
   if (settings.fill) {
     for (const r of rosettes) {
-      fillPath(r.shape, r.sides === maxSides ? pal.fills[0] : pal.fills[1]);
+      fillPath(c, r.shape, r.sides === maxSides ? pal.fills[0] : pal.fills[1]);
     }
   }
 
   // Layer 2: the faint tiling skeleton
   if (settings.showTiling) {
-    ctx.strokeStyle = pal.outline;
-    ctx.globalAlpha = 0.25;
-    ctx.lineWidth = 1;
-    for (const poly of polygons) drawPath(poly, true);
-    ctx.globalAlpha = 1;
+    c.strokeStyle = pal.outline;
+    c.globalAlpha = 0.25;
+    c.lineWidth = 1;
+    for (const poly of polygons) drawPath(c, poly, true);
+    c.globalAlpha = 1;
   }
 
   // Layer 3: straps — a thick dark line, then a thinner light line on top
-  ctx.lineJoin = "round";
-  ctx.lineCap = "round";
-  buildStrapPath(allPieces);
+  c.lineJoin = "round";
+  c.lineCap = "round";
+  buildStrapPath(c, allPieces);
 
-  ctx.strokeStyle = pal.outline;
-  ctx.lineWidth = settings.strapWidth + 4;    // 2px of outline on each side
-  ctx.stroke();
+  c.strokeStyle = pal.outline;
+  c.lineWidth = settings.strapWidth + 4;    // 2px of outline on each side
+  c.stroke();
 
-  ctx.strokeStyle = pal.strap;
-  ctx.lineWidth = settings.strapWidth;
-  ctx.stroke();
+  c.strokeStyle = pal.strap;
+  c.lineWidth = settings.strapWidth;
+  c.stroke();
 
-  ctx.restore();
+  c.restore();
+}
+
+// The θ we should draw right now: the slider value, plus a gentle wave when breathing
+let breatheTime = 0;
+function currentTheta() {
+  if (!settings.breathe) return settings.theta;
+  const t = settings.theta + BREATHE_RANGE * Math.sin(breatheTime);
+  return Math.min(89, Math.max(1, t));      // keep it inside the valid 1°–89° range
+}
+
+// Draw on the screen
+function draw() {
+  renderPattern(ctx, canvas.clientWidth, canvas.clientHeight, currentTheta());
 }
 
 // ---- 8. Keep the canvas sharp and full-screen ----
@@ -377,6 +399,57 @@ function resize() {
   canvas.height = canvas.clientHeight * dpr;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);     // so we can keep drawing in CSS pixels
   draw();
+}
+
+// ---- 8b. Breathe animation ----
+// requestAnimationFrame calls `animate` before every screen refresh (~60 times a second)
+let lastFrame = null;
+function animate(now) {
+  if (!settings.breathe) { lastFrame = null; return; }   // stop the loop
+  if (lastFrame !== null) breatheTime += (now - lastFrame) / 1000 * BREATHE_SPEED;
+  lastFrame = now;
+  draw();
+  requestAnimationFrame(animate);
+}
+
+function setBreathe(on) {
+  settings.breathe = on;
+  breatheButton.classList.toggle("active", on);
+  breatheButton.textContent = on ? "Pause" : "Breathe";
+  if (on) requestAnimationFrame(animate);
+  else draw();                                  // settle back on the slider's θ
+}
+
+// ---- 8c. Export a high-resolution PNG ----
+const EXPORT_SCALE = 3;   // 3× the screen size — sharp enough to print
+
+function exportPNG() {
+  const width = canvas.clientWidth;
+  const height = canvas.clientHeight;
+
+  // A hidden canvas, 3× bigger than the screen
+  const big = document.createElement("canvas");
+  big.width = width * EXPORT_SCALE;
+  big.height = height * EXPORT_SCALE;
+  const bigCtx = big.getContext("2d");
+  bigCtx.setTransform(EXPORT_SCALE, 0, 0, EXPORT_SCALE, 0, 0);
+
+  // Same picture, drawn bigger
+  const theta = currentTheta();
+  renderPattern(bigCtx, width, height, theta);
+
+  // A file name that records the settings, e.g. kashi-octagon-67.5deg-multani-kashi.png
+  const paletteSlug = PALETTES[settings.palette].name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+  const fileName = `kashi-${settings.tiling}-${theta.toFixed(1)}deg-${paletteSlug}.png`;
+
+  // Turn the canvas into a file and click a hidden download link
+  big.toBlob(blob => {
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = fileName;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  }, "image/png");
 }
 
 // ---- 9. Controls ----
@@ -396,12 +469,24 @@ tilingSelect.addEventListener("change", () => {
   draw();
 });
 
+// Every control registers a small function that copies `settings` back into the UI.
+// Randomize changes `settings` directly, then calls syncControls() to update the panel.
+const syncers = [];
+function syncControls() {
+  for (const sync of syncers) sync();
+}
+syncers.push(() => { tilingSelect.value = settings.tiling; });
+
 // Connect a slider to a setting, and show its value next to the label
 function bindSlider(id, key, format) {
   const slider = document.getElementById(id);
   const output = document.getElementById(id + "-value");
-  slider.value = settings[key];
-  output.textContent = format(settings[key]);
+  const sync = () => {
+    slider.value = settings[key];
+    output.textContent = format(settings[key]);
+  };
+  sync();
+  syncers.push(sync);
   slider.addEventListener("input", () => {
     settings[key] = parseFloat(slider.value);
     output.textContent = format(settings[key]);
@@ -417,7 +502,9 @@ bindSlider("strapWidth", "strapWidth", v => v + " px");
 // Connect a checkbox to a true/false setting
 function bindCheckbox(id, key) {
   const box = document.getElementById(id);
-  box.checked = settings[key];
+  const sync = () => { box.checked = settings[key]; };
+  sync();
+  syncers.push(sync);
   box.addEventListener("change", () => {
     settings[key] = box.checked;
     draw();
@@ -441,13 +528,66 @@ PALETTES.forEach((pal, index) => {
   swatchRow.appendChild(button);
 });
 
+function showPalette() {
+  paletteName.textContent = PALETTES[settings.palette].name;
+  [...swatchRow.children].forEach((b, i) => b.classList.toggle("active", i === settings.palette));
+}
+syncers.push(showPalette);
+
 function selectPalette(index) {
   settings.palette = index;
-  paletteName.textContent = PALETTES[index].name;
-  [...swatchRow.children].forEach((b, i) => b.classList.toggle("active", i === index));
+  showPalette();
   draw();
 }
-selectPalette(settings.palette);
+showPalette();
+
+// ---- 10. Randomize ----
+// Random number between min and max
+const rand = (min, max) => min + Math.random() * (max - min);
+// Random item from a list
+const pick = list => list[Math.floor(Math.random() * list.length)];
+
+function randomize() {
+  settings.tiling = pick(Object.keys(TILINGS));
+  settings.theta = Math.round(rand(30, 75) * 2) / 2;           // to the nearest 0.5°
+  settings.delta = Math.random() < 0.6 ? 0 : Math.round(rand(0.05, 0.4) * 100) / 100;
+  settings.tileSize = Math.round(rand(60, 140));
+  settings.rotation = Math.random() < 0.7 ? 0 : Math.round(rand(0, 90));
+  settings.strapWidth = Math.round(rand(3, 10) * 2) / 2;
+  settings.palette = Math.floor(Math.random() * PALETTES.length);
+  settings.fill = Math.random() < 0.75;
+  syncControls();
+  draw();
+}
+
+// ---- 11. Buttons ----
+const randomButton = document.getElementById("randomize");
+const breatheButton = document.getElementById("breathe");
+const exportButton = document.getElementById("export");
+
+randomButton.addEventListener("click", randomize);
+breatheButton.addEventListener("click", () => setBreathe(!settings.breathe));
+exportButton.addEventListener("click", exportPNG);
+
+// ---- 12. Keyboard shortcuts ----
+const panel = document.getElementById("panel");
+
+window.addEventListener("keydown", event => {
+  // don't steal keys while the user is using the dropdown
+  if (event.target.tagName === "SELECT") return;
+
+  switch (event.key.toLowerCase()) {
+    case " ":                                   // Space: breathe on/off
+      event.preventDefault();                   // stop the page from scrolling
+      setBreathe(!settings.breathe);
+      break;
+    case "r": randomize(); break;               // R: randomize
+    case "e": exportPNG(); break;               // E: export PNG
+    case "h": panel.classList.toggle("hidden"); break;   // H: hide panel (for clean videos)
+    case "t": settings.showTiling = !settings.showTiling; syncControls(); draw(); break;
+    case "f": settings.fill = !settings.fill; syncControls(); draw(); break;
+  }
+});
 
 window.addEventListener("resize", resize);
 resize();

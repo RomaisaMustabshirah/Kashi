@@ -137,3 +137,75 @@ html, body {
   border-color: #7fd0e3;
   transform: scale(1.15);
 }
+
+/* ---- Buttons ---- */
+.buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.buttons button {
+  padding: 9px 0;
+  border: 1px solid rgba(244, 239, 228, 0.3);
+  border-radius: 8px;
+  background: transparent;
+  color: #f4efe4;
+  font-size: 13px;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.buttons button:hover {
+  background: rgba(244, 239, 228, 0.12);
+}
+
+/* Breathe button while the animation is running */
+.buttons button.active {
+  background: #7fd0e3;
+  border-color: #7fd0e3;
+  color: #0f1a33;
+}
+
+/* Export: the main action, full width */
+.buttons button.primary {
+  grid-column: 1 / -1;
+  background: #7fd0e3;
+  border-color: #7fd0e3;
+  color: #0f1a33;
+  font-weight: 600;
+}
+
+.buttons button.primary:hover {
+  background: #a3e0ee;
+}
+
+/* ---- Keyboard hint ---- */
+.hint {
+  margin-top: 14px;
+  font-size: 11px;
+  line-height: 1.9;
+  opacity: 0.6;
+  text-align: center;
+}
+
+kbd {
+  display: inline-block;
+  padding: 0 5px;
+  border: 1px solid rgba(244, 239, 228, 0.35);
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 10px;
+}
+
+/* ---- H key: slide the panel away for clean screenshots and videos ---- */
+#panel {
+  transition: transform 0.3s ease, opacity 0.3s ease;
+}
+
+#panel.hidden {
+  transform: translateX(-120%);
+  opacity: 0;
+  pointer-events: none;
+}
