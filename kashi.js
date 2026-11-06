@@ -1,20 +1,37 @@
 // =====================================================
-//  KASHI — Step 3: Hankin's method — star patterns
+//  KASHI — Step 4: straps, palettes and composition
 // =====================================================
 
 // ---- 1. Grab the canvas and its 2D drawing context ----
 const canvas = document.getElementById("art");
 const ctx = canvas.getContext("2d");
 
-// ---- 2. Settings we will turn into sliders later ----
+// ---- 2. Palettes ----
+// bg      : background (the "glaze")
+// outline : the dark edge of each strap
+// strap   : the inside of each strap
+// fills   : [main rosettes, smaller shapes]
+const PALETTES = [
+  { name: "Multani Kashi", bg: "#f4efe4", outline: "#1b3f8b", strap: "#f4efe4", fills: ["#2e9cc0", "#cfe6ec"] },
+  { name: "Lapis Night",   bg: "#0c1633", outline: "#d6a84e", strap: "#0c1633", fills: ["#1f3a7a", "#152a5c"] },
+  { name: "Terracotta",    bg: "#ead5b3", outline: "#6e2a14", strap: "#ead5b3", fills: ["#c0623a", "#e2b78a"] },
+  { name: "Emerald Court", bg: "#0f3d35", outline: "#f1e3b5", strap: "#0f3d35", fills: ["#1f6b5c", "#175247"] },
+  { name: "Ink & Paper",   bg: "#fbfaf6", outline: "#16181d", strap: "#fbfaf6", fills: ["#bdb6a6", "#e4e1d8"] },
+  { name: "Rose Marble",   bg: "#f6e7e4", outline: "#5a2a3c", strap: "#f6e7e4", fills: ["#c9707f", "#efcfcf"] },
+  { name: "Chaand Raat",   bg: "#E0AA3E", outline: "#151B54", strap: "#0E3A24", fills: ["#AB2330", "#B7410E"] },
+];
+
+// ---- 2b. Settings (every slider writes into this object) ----
 const settings = {
-  tileSize: 90,          // edge length of each polygon, in pixels
-  background: "#f4efe4", // warm off-white, like glazed tile
-  lineColor: "#1b3f8b",  // Multani cobalt blue
   tiling: "octagon",     // which tiling to draw (a key of TILINGS)
   theta: 67.5,           // contact angle in degrees (0–90)
   delta: 0,              // ray offset from the edge midpoint (0–1)
-  showTiling: true,      // draw the faint polygon skeleton underneath
+  tileSize: 90,          // edge length of each polygon, in pixels
+  rotation: 0,           // rotate the whole pattern, in degrees
+  strapWidth: 6,         // thickness of the woven straps, in pixels
+  palette: 0,            // index into PALETTES
+  fill: true,            // colour the star rosettes
+  showTiling: false,     // draw the faint polygon skeleton underneath
 };
 
 // ---- 3. Tilings ----
@@ -242,13 +259,20 @@ function hankinPolygon(points, theta, delta) {
 
   // Step B: ray B of edge i meets ray A of edge i+1, near the corner they share
   const pieces = [];
+  const rosette = [];      // outline of the central star, used for colour fills
   for (let i = 0; i < n; i++) {
     const e1 = edges[i];
     const e2 = edges[(i + 1) % n];
     const hit = rayIntersection(e1.startB, e1.dirB, e2.startA, e2.dirA);
     if (hit) pieces.push([ e1.startB, hit, e2.startA ]);   // a little "V" shape
+
+    // walk around the star: along the edge (A → B), then out to the star point
+    rosette.push(e1.startA, e1.startB);
+    if (hit) rosette.push(hit);
   }
-  return pieces;
+
+  // Only keep the rosette if every corner produced a star point
+  return { pieces, rosette: pieces.length === n ? rosette : null };
 }
 
 // ---- 6. Drawing helpers ----
@@ -263,36 +287,87 @@ function drawPath(points, closed) {
   ctx.stroke();
 }
 
+// Fill a closed shape
+function fillPath(points, color) {
+  ctx.beginPath();
+  ctx.moveTo(points[0].x, points[0].y);
+  for (let k = 1; k < points.length; k++) ctx.lineTo(points[k].x, points[k].y);
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.fill();
+}
+
+// Put ALL star pieces into ONE path, so we can stroke thousands of lines in a single call
+function buildStrapPath(allPieces) {
+  ctx.beginPath();
+  for (const piece of allPieces) {
+    ctx.moveTo(piece[0].x, piece[0].y);
+    for (let k = 1; k < piece.length; k++) ctx.lineTo(piece[k].x, piece[k].y);
+  }
+}
+
 // ---- 7. Draw the whole picture ----
 function draw() {
   const width = canvas.clientWidth;
   const height = canvas.clientHeight;
+  const pal = PALETTES[settings.palette];
 
   // Background
-  ctx.fillStyle = settings.background;
+  ctx.fillStyle = pal.bg;
   ctx.fillRect(0, 0, width, height);
+
+  // Rotate the whole drawing around the centre of the screen
+  ctx.save();
+  ctx.translate(width / 2, height / 2);
+  ctx.rotate(settings.rotation * Math.PI / 180);
+  ctx.translate(-width / 2, -height / 2);
 
   // Tiling
   const tiling = TILINGS[settings.tiling].make(settings.tileSize);
   const polygons = buildPolygons(tiling, width, height);
 
-  // Layer 1: the faint tiling skeleton
-  if (settings.showTiling) {
-    ctx.strokeStyle = "rgba(27, 63, 139, 0.15)";
-    ctx.lineWidth = 1;
-    for (const poly of polygons) drawPath(poly, true);
+  // The polygon with the most sides gets the main fill colour
+  const maxSides = Math.max(...tiling.cell.map(shape => shape.length));
+
+  // Run Hankin's method once for every polygon
+  const allPieces = [];
+  const rosettes = [];
+  for (const poly of polygons) {
+    const result = hankinPolygon(poly, settings.theta, settings.delta);
+    allPieces.push(...result.pieces);
+    if (result.rosette) rosettes.push({ shape: result.rosette, sides: poly.length });
   }
 
-  // Layer 2: the star pattern
-  ctx.strokeStyle = settings.lineColor;
-  ctx.lineWidth = 2;
-  ctx.lineJoin = "round";
-  ctx.lineCap = "round";
-  for (const poly of polygons) {
-    for (const piece of hankinPolygon(poly, settings.theta, settings.delta)) {
-      drawPath(piece, false);
+  // Layer 1: coloured rosettes
+  if (settings.fill) {
+    for (const r of rosettes) {
+      fillPath(r.shape, r.sides === maxSides ? pal.fills[0] : pal.fills[1]);
     }
   }
+
+  // Layer 2: the faint tiling skeleton
+  if (settings.showTiling) {
+    ctx.strokeStyle = pal.outline;
+    ctx.globalAlpha = 0.25;
+    ctx.lineWidth = 1;
+    for (const poly of polygons) drawPath(poly, true);
+    ctx.globalAlpha = 1;
+  }
+
+  // Layer 3: straps — a thick dark line, then a thinner light line on top
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  buildStrapPath(allPieces);
+
+  ctx.strokeStyle = pal.outline;
+  ctx.lineWidth = settings.strapWidth + 4;    // 2px of outline on each side
+  ctx.stroke();
+
+  ctx.strokeStyle = pal.strap;
+  ctx.lineWidth = settings.strapWidth;
+  ctx.stroke();
+
+  ctx.restore();
 }
 
 // ---- 8. Keep the canvas sharp and full-screen ----
@@ -335,13 +410,44 @@ function bindSlider(id, key, format) {
 }
 bindSlider("theta", "theta", v => v.toFixed(1) + "°");
 bindSlider("delta", "delta", v => v.toFixed(2));
+bindSlider("tileSize", "tileSize", v => v + " px");
+bindSlider("rotation", "rotation", v => v + "°");
+bindSlider("strapWidth", "strapWidth", v => v + " px");
 
-const tilingToggle = document.getElementById("showTiling");
-tilingToggle.checked = settings.showTiling;
-tilingToggle.addEventListener("change", () => {
-  settings.showTiling = tilingToggle.checked;
-  draw();
+// Connect a checkbox to a true/false setting
+function bindCheckbox(id, key) {
+  const box = document.getElementById(id);
+  box.checked = settings[key];
+  box.addEventListener("change", () => {
+    settings[key] = box.checked;
+    draw();
+  });
+}
+bindCheckbox("fill", "fill");
+bindCheckbox("showTiling", "showTiling");
+
+// Palette swatches: one round button per palette, built from the PALETTES list
+const swatchRow = document.getElementById("palettes");
+const paletteName = document.getElementById("palette-name");
+
+PALETTES.forEach((pal, index) => {
+  const button = document.createElement("button");
+  button.className = "swatch";
+  button.title = pal.name;
+  // three colour bands: background, outline, main fill
+  button.style.background =
+    `linear-gradient(135deg, ${pal.bg} 0 40%, ${pal.outline} 40% 60%, ${pal.fills[0]} 60% 100%)`;
+  button.addEventListener("click", () => selectPalette(index));
+  swatchRow.appendChild(button);
 });
+
+function selectPalette(index) {
+  settings.palette = index;
+  paletteName.textContent = PALETTES[index].name;
+  [...swatchRow.children].forEach((b, i) => b.classList.toggle("active", i === index));
+  draw();
+}
+selectPalette(settings.palette);
 
 window.addEventListener("resize", resize);
 resize();

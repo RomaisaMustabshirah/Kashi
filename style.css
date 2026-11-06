@@ -23,7 +23,9 @@ html, body {
   position: fixed;
   top: 20px;
   left: 20px;
-  width: 260px;
+  width: 270px;
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;          /* scroll inside the panel on small screens */
   padding: 18px 20px;
   background: rgba(15, 26, 51, 0.88);
   color: #f4efe4;
@@ -38,8 +40,25 @@ html, body {
   color: #7fd0e3;
 }
 
+.section-title {
+  font-size: 10px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: #7fd0e3;
+  opacity: 0.9;
+  margin: 18px 0 10px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(244, 239, 228, 0.15);
+}
+
+#panel h1 + .section-title {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
 .control {
-  margin-bottom: 16px;
+  margin-bottom: 14px;
 }
 
 .control label {
@@ -79,7 +98,7 @@ html, body {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 0;
+  margin-bottom: 10px;
 }
 
 .control.checkbox label {
@@ -92,4 +111,29 @@ html, body {
   height: 16px;
   accent-color: #7fd0e3;
   cursor: pointer;
+}
+
+/* ---- Palette swatches ---- */
+#palettes {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.swatch {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 2px solid rgba(244, 239, 228, 0.25);
+  cursor: pointer;
+  transition: transform 0.15s, border-color 0.15s;
+}
+
+.swatch:hover {
+  transform: scale(1.1);
+}
+
+.swatch.active {
+  border-color: #7fd0e3;
+  transform: scale(1.15);
 }
