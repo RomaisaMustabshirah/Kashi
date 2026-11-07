@@ -1,5 +1,6 @@
 // =====================================================
-//  KASHI — Step 5: breathe, randomize, export
+//  KASHI — Generative Islamic Geometry
+//  by Romaisa Mustabshirah
 // =====================================================
 
 // ---- 1. Grab the canvas and its 2D drawing context ----
@@ -591,3 +592,26 @@ window.addEventListener("keydown", event => {
 
 window.addEventListener("resize", resize);
 resize();
+
+// =====================================================
+//  Step 6 additions: About overlay
+// =====================================================
+const about = document.getElementById("about");
+
+function openAbout()  { about.hidden = false; }
+function closeAbout() { about.hidden = true; }
+
+document.getElementById("about-open").addEventListener("click", openAbout);
+document.getElementById("about-close").addEventListener("click", closeAbout);
+
+// Clicking the dark area outside the card also closes it
+about.addEventListener("click", event => {
+  if (event.target === about) closeAbout();
+});
+
+// A opens / closes the About panel, Escape closes it
+window.addEventListener("keydown", event => {
+  if (event.target.tagName === "SELECT") return;
+  if (event.key === "Escape") closeAbout();
+  if (event.key.toLowerCase() === "a") about.hidden = !about.hidden;
+});
